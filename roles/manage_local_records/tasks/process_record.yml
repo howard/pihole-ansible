@@ -1,9 +1,9 @@
 ---
 - name: Process record on Pi-hole instance
   block:
-    - name: Manage A record
+    - name: Manage DNS record
       ansible.builtin.debug:
-        msg: "Processing A record {{ record.name }} on {{ pihole_instance.name }}"
+        msg: "Processing DNS record {{ record.name }} on {{ pihole_instance.name }}"
 
     - name: Manage A record
       sbarbett.pihole.local_a_record:
@@ -24,14 +24,10 @@
       when: record.type == "AAAA"
 
     - name: Manage CNAME record
-      ansible.builtin.debug:
-        msg: "Processing CNAME record {{ record.name }} on {{ pihole_instance.name }}"
-
-    - name: Manage CNAME record
       sbarbett.pihole.local_cname:
         host: "{{ record.name }}"
         target: "{{ record.data }}"
-        ttl: "{{ record.ttl | default(300) }}"
+        ttl: "{{ record.ttl | default(omit) }}"
         state: "{{ record.state }}"
         url: "{{ pihole_instance.name }}"
         password: "{{ pihole_instance.password }}"

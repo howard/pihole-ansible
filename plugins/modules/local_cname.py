@@ -29,7 +29,6 @@ options:
             - The TTL (time-to-live) value for the record.
         required: false
         type: int
-        default: 300
     state:
         description:
             - Whether the CNAME record should be present or absent.
@@ -86,7 +85,7 @@ def run_module():
     module_args = dict(
         host=dict(type='str', required=True),
         target=dict(type='str', required=True),
-        ttl=dict(type='int', required=False, default=300),
+        ttl=dict(type='int', required=False),
         state=dict(type='str', choices=['present', 'absent'], required=True),
         password=dict(type='str', required=True, no_log=True),
         url=dict(type='str', required=True)
@@ -120,29 +119,41 @@ def run_module():
         existing_target = None
         existing_ttl = None
         for entry in cname_list:
-            # Each entry is expected to be "host,target,ttl"
+            # Each entry can be "host,target" or "host,target,ttl"
             parts = entry.split(',')
-            if len(parts) == 3:
-                rec_host, rec_target, rec_ttl = parts
-                try:
-                    rec_ttl = int(rec_ttl)
-                except ValueError:
-                    rec_ttl = rec_ttl
+            if len(parts) >= 2:
+                rec_host = parts[0]
+                rec_target = parts[1]
+                rec_ttl = None
                 if rec_host == host:
                     existing_target = rec_target
-                    existing_ttl = rec_ttl
+                    if len(parts) == 3:
+                        try:
+                            rec_ttl = int(parts[2])
+                        except ValueError:
+                            rec_ttl = parts[2]
+                        existing_ttl = rec_ttl
                     break
 
         if state == 'present':
             if existing_target is None:
                 # No record exists; add the new CNAME record.
-                add_response = client.config.add_local_cname(host, target, ttl=ttl)
+                if ttl is not None:
+                    add_response = client.config.add_local_cname(host, target, ttl=ttl)
+                else:
+                    add_response = client.config.add_local_cname(host, target)
                 result['changed'] = True
                 result['result'] = add_response
             elif existing_target != target or existing_ttl != ttl:
                 # Record exists but with different target or ttl; remove then re-add.
-                remove_response = client.config.remove_local_cname(host, existing_target, ttl=existing_ttl)
-                add_response = client.config.add_local_cname(host, target, ttl=ttl)
+                if existing_ttl is not None:
+                    remove_response = client.config.remove_local_cname(host, existing_target, ttl=existing_ttl)
+                else:
+                    remove_response = client.config.remove_local_cname(host, existing_target)
+                if ttl is not None:
+                    add_response = client.config.add_local_cname(host, target, ttl=ttl)
+                else:
+                    add_response = client.config.add_local_cname(host, target)
                 result['changed'] = True
                 result['result'] = {'removed': remove_response, 'added': add_response}
             else:
@@ -151,7 +162,10 @@ def run_module():
 
         elif state == 'absent':
             if existing_target is not None:
-                remove_response = client.config.remove_local_cname(host, existing_target, ttl=existing_ttl)
+                if existing_ttl is not None:
+                    remove_response = client.config.remove_local_cname(host, existing_target, ttl=existing_ttl)
+                else:
+                    remove_response = client.config.remove_local_cname(host, existing_target)
                 result['changed'] = True
                 result['result'] = remove_response
             else:
